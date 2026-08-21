@@ -231,3 +231,58 @@ st.caption(
     f"Minimul mediu la pranz apare in jurul orei {midday_min_hour}:00, "
     f"iar maximul mediu de seara in jurul orei {evening_max_hour}:00."
 )
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Concluzie Q1 - calculata pentru Eolian + Solar
+
+q1_residual_mean = df["SarcinaReziduala[MW]"].mean()
+
+q1_residual_share = (
+    df["SarcinaReziduala[MW]"].sum()
+    / df["Consum[MW]"].sum() * 100
+)
+
+q1_wind_solar_share = 100 - q1_residual_share
+
+q1_midday_profile = hourly_profile.loc[11:15]
+q1_evening_profile = hourly_profile.loc[17:21]
+
+q1_midday_min_hour = (
+    q1_midday_profile["SarcinaReziduala[MW]"].idxmin()
+)
+
+q1_midday_min_value = (
+    q1_midday_profile["SarcinaReziduala[MW]"].min()
+)
+
+q1_evening_max_hour = (
+    q1_evening_profile["SarcinaReziduala[MW]"].idxmax()
+)
+
+q1_evening_max_value = (
+    q1_evening_profile["SarcinaReziduala[MW]"].max()
+)
+
+
+st.subheader("Concluzie Q1")
+
+st.markdown(
+    f"""
+Pe parcursul anului 2025, după scăderea producției **eoliene și solare** din consum,
+sarcina reziduală medie este de aproximativ **{q1_residual_mean:.0f} MW**.
+Aceasta reprezintă aproximativ **{q1_residual_share:.1f}% din consumul total**,
+în timp ce eolianul și solarul acoperă împreună aproximativ
+**{q1_wind_solar_share:.1f}%**.
+
+Profilul mediu zilnic arată că sarcina reziduală scade în intervalul de prânz,
+atingând un minim de aproximativ **{q1_midday_min_value:.0f} MW**
+în jurul orei **{q1_midday_min_hour}:00**, iar spre seară crește până la
+aproximativ **{q1_evening_max_value:.0f} MW**, în jurul orei
+**{q1_evening_max_hour}:00**.
+
+Prin urmare, chiar și după contribuția producției eoliene și solare,
+**cea mai mare parte a consumului rămâne de acoperit de restul sistemului energetic**.
+Graficul interactiv permite analizarea separată a impactului producției solare,
+eoliene sau al celor două surse împreună asupra sarcinii rămase.
+"""
+)
