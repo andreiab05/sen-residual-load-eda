@@ -861,3 +861,359 @@ reziduale. Analiza rampelor din Q2 completeaza aceasta observatie prin evidentie
 vitezei cu care sarcina reziduala se poate modifica in intervalele scurte de timp.
 """
 )
+
+# ==========================================================================================================================================================================
+# Q4 - Cat de bine urmareste productia totala consumul?
+
+st.divider()
+
+st.header("Q4 - Productie, consum si sold")
+
+st.caption(
+    "Cat de bine urmareste productia totala consumul si exista decalaje "
+    "sistematice de subproductie sau supraproductie?"
+)
+
+st.write(
+    "Analizam diferenta dintre productia interna si consum, iar apoi verificam "
+    "in ce masura aceasta diferenta este compensata prin soldul de import/export."
+)
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Diferenta dintre productie si consum
+
+df["DiferentaProductieConsum[MW]"] = (
+    df["Productie[MW]"]
+    - df["Consum[MW]"]
+)
+
+df["EroareBalanta[MW]"] = (
+    df["Productie[MW]"]
+    + df["Sold[MW]"]
+    - df["Consum[MW]"]
+)
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Profilul mediu pe ore
+
+hourly_balance = df.groupby("Ora")[
+    [
+        "Productie[MW]",
+        "Consum[MW]",
+        "Sold[MW]",
+        "DiferentaProductieConsum[MW]",
+        "EroareBalanta[MW]"
+    ]
+].mean()
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Indicatorii generali
+
+mean_difference = (
+    df["DiferentaProductieConsum[MW]"].mean()
+)
+
+median_difference = (
+    df["DiferentaProductieConsum[MW]"].median()
+)
+
+deficit_share = (
+    (df["DiferentaProductieConsum[MW]"] < 0).mean()
+    * 100
+)
+
+surplus_share = (
+    (df["DiferentaProductieConsum[MW]"] > 0).mean()
+    * 100
+)
+
+mean_sold = df["Sold[MW]"].mean()
+
+mean_abs_balance_error = (
+    df["EroareBalanta[MW]"].abs().mean()
+)
+
+mean_consumption = df["Consum[MW]"].mean()
+
+balance_error_share = (
+    mean_abs_balance_error
+    / mean_consumption
+    * 100
+)
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Momente relevante ale profilului zilnic
+
+max_avg_deficit_hour = (
+    hourly_balance["DiferentaProductieConsum[MW]"].idxmin()
+)
+
+max_avg_deficit_value = (
+    hourly_balance["DiferentaProductieConsum[MW]"].min()
+)
+
+max_avg_surplus_hour = (
+    hourly_balance["DiferentaProductieConsum[MW]"].idxmax()
+)
+
+max_avg_surplus_value = (
+    hourly_balance["DiferentaProductieConsum[MW]"].max()
+)
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Extremele individuale
+
+largest_deficits = df.nsmallest(
+    10,
+    "DiferentaProductieConsum[MW]"
+)
+
+largest_surpluses = df.nlargest(
+    10,
+    "DiferentaProductieConsum[MW]"
+)
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Indicatori principali
+
+col1, col2, col3, col4 = st.columns(4)
+
+col1.metric(
+    "Diferenta medie productie - consum",
+    f"{mean_difference:.0f} MW"
+)
+
+col2.metric(
+    "Productie sub consum",
+    f"{deficit_share:.1f}%"
+)
+
+col3.metric(
+    "Sold mediu",
+    f"{mean_sold:.0f} MW"
+)
+
+col4.metric(
+    "Eroare medie a balantei",
+    f"{mean_abs_balance_error:.2f} MW",
+    help=f"{balance_error_share:.3f}% din consumul mediu"
+)
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Grafic 1 - Productie vs consum
+
+st.subheader("Profilul mediu zilnic")
+
+fig, ax = plt.subplots(figsize=(12, 6))
+
+ax.plot(
+    hourly_balance.index,
+    hourly_balance["Consum[MW]"],
+    marker="o",
+    label="Consum mediu"
+)
+
+ax.plot(
+    hourly_balance.index,
+    hourly_balance["Productie[MW]"],
+    marker="o",
+    label="Productie medie"
+)
+
+ax.set_xlabel("Ora")
+ax.set_ylabel("MW")
+
+ax.set_title(
+    "Profil mediu zilnic al productiei si consumului"
+)
+
+ax.set_xticks(range(24))
+ax.legend()
+ax.grid(alpha=0.3)
+
+st.pyplot(
+    fig,
+    use_container_width=True
+)
+
+plt.close(fig)
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Grafic 2 - Diferenta productie - consum
+
+st.subheader("Decalajul mediu dintre productie si consum")
+
+fig, ax = plt.subplots(figsize=(12, 6))
+
+ax.plot(
+    hourly_balance.index,
+    hourly_balance["DiferentaProductieConsum[MW]"],
+    marker="o",
+    label="Productie - Consum"
+)
+
+ax.axhline(0)
+
+ax.set_xlabel("Ora")
+ax.set_ylabel("MW")
+
+ax.set_title(
+    "Diferenta medie dintre productie si consum pe ore"
+)
+
+ax.set_xticks(range(24))
+ax.legend()
+ax.grid(alpha=0.3)
+
+st.pyplot(
+    fig,
+    use_container_width=True
+)
+
+plt.close(fig)
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Momente relevante
+
+st.subheader("Momente relevante")
+
+col1, col2 = st.columns(2)
+
+col1.metric(
+    "Cel mai mare deficit mediu",
+    f"{max_avg_deficit_value:.0f} MW",
+    help=f"In jurul orei {max_avg_deficit_hour}:00"
+)
+
+col2.metric(
+    "Cel mai mare surplus mediu",
+    f"+{max_avg_surplus_value:.0f} MW",
+    help=f"In jurul orei {max_avg_surplus_hour}:00"
+)
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Grafic 3 - Verificarea balantei energetice
+
+st.subheader("Verificarea balantei energetice")
+
+st.caption(
+    "Daca productia si soldul compenseaza consumul, valoarea "
+    "Productie + Sold - Consum trebuie sa ramana apropiata de zero."
+)
+
+fig, ax = plt.subplots(figsize=(12, 6))
+
+ax.plot(
+    hourly_balance.index,
+    hourly_balance["EroareBalanta[MW]"],
+    marker="o",
+    label="Productie + Sold - Consum"
+)
+
+ax.axhline(0)
+
+ax.set_xlabel("Ora")
+ax.set_ylabel("MW")
+
+ax.set_title(
+    "Eroarea medie a balantei energetice pe ore"
+)
+
+ax.set_xticks(range(24))
+ax.legend()
+ax.grid(alpha=0.3)
+
+st.pyplot(
+    fig,
+    use_container_width=True
+)
+
+plt.close(fig)
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Extreme individuale
+
+with st.expander("Vezi top 10 deficit si surplus"):
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        st.write("**Top 10 momente cu productie sub consum**")
+
+        st.dataframe(
+            largest_deficits[
+                [
+                    "Data",
+                    "Productie[MW]",
+                    "Consum[MW]",
+                    "DiferentaProductieConsum[MW]",
+                    "Sold[MW]"
+                ]
+            ],
+            hide_index=True,
+            use_container_width=True
+        )
+
+    with col2:
+
+        st.write("**Top 10 momente cu productie peste consum**")
+
+        st.dataframe(
+            largest_surpluses[
+                [
+                    "Data",
+                    "Productie[MW]",
+                    "Consum[MW]",
+                    "DiferentaProductieConsum[MW]",
+                    "Sold[MW]"
+                ]
+            ],
+            hide_index=True,
+            use_container_width=True
+        )
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Concluzie Q4
+
+st.subheader("Concluzie Q4")
+
+st.markdown(
+    f"""
+Productia interna prezinta un **decalaj sistematic spre deficit fata de consum**.
+In 2025, productia a fost in medie cu aproximativ
+**{abs(mean_difference):.0f} MW sub consum**, iar in
+**{deficit_share:.1f}% dintre observatii** productia a fost mai mica decat consumul.
+
+Deficitul este mai pronuntat spre seara, atingand in profilul mediu aproximativ
+**{max_avg_deficit_value:.0f} MW** in jurul orei
+**{max_avg_deficit_hour}:00**. In jurul pranzului apar si perioade cu surplus,
+cel mai mare surplus mediu fiind de aproximativ
+**+{max_avg_surplus_value:.0f} MW** la ora **{max_avg_surplus_hour}:00**.
+
+Diferenta dintre productie si consum este insa compensata aproape integral prin
+soldul de import/export. Soldul mediu este de aproximativ
+**{mean_sold:.0f} MW**, foarte apropiat ca valoare de deficitul mediu de productie.
+
+Dupa includerea soldului, relatia **Productie + Sold ≈ Consum** prezinta o eroare
+medie absoluta de doar **{mean_abs_balance_error:.2f} MW**, adica aproximativ
+**{balance_error_share:.3f}% din consumul mediu**.
+
+Prin urmare, exista un decalaj sistematic intre productia interna si consum,
+predominant spre subproductie, dar **nu se observa un dezechilibru semnificativ
+al balantei sistemului**, deoarece diferenta este compensata aproape complet
+prin schimburile de energie reflectate de sold.
+"""
+)
