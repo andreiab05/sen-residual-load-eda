@@ -81,12 +81,16 @@ df["Ora"] = df["Data"].dt.hour
 
 st.title("Analiza Sistemului Energetic National - 2025")
 
-st.subheader(
-    "Q1 - Cum arata sarcina reziduala pe parcursul zilei si cat ramane de acoperit?"
-)
+st.header("Q1 - Sarcina reziduala")
 
 st.caption(
-    "Selecteaza sursa sau sursele pe care vrei sa le scazi din consum pentru a vedea impactul lor asupra sarcinii ramase."
+    "Cum arata sarcina reziduala pe parcursul zilei si cat ramane de acoperit "
+    "dupa contributia productiei eoliene si solare?"
+)
+
+st.write(
+    "Selecteaza sursa sau sursele pentru a vedea separat impactul acestora "
+    "asupra sarcinii ramase."
 )
 
 
@@ -292,11 +296,15 @@ eoliene sau al celor două surse împreună asupra sarcinii rămase.
 
 st.divider()
 
-st.header("Q2 - Analiza rampelor")
+st.header("Q2 - Rampele sarcinii reziduale")
+
+st.caption(
+    "Care sunt cele mai mari rampe ale sarcinii reziduale si la ce ore apar?"
+)
 
 st.write(
-    "Analizam modificarile sarcinii reziduale intre observatii consecutive "
-    "aflate la aproximativ 10 minute distanta."
+    "Rampele sunt calculate intre observatii consecutive aflate la aproximativ "
+    "10 minute distanta, astfel incat valorile sa fie comparabile."
 )
 
 
@@ -541,5 +549,315 @@ Rezultatele indica faptul ca sarcina reziduala prezinta variatii rapide pe
 intervale scurte, iar intervalul orar identificat pentru cel mai puternic
 ramp-up mediu necesita o crestere mai rapida a productiei sau a altor resurse
 de echilibrare pentru a acoperi modificarea sarcinii reziduale.
+"""
+)
+
+# ==========================================================================================================================================================================
+# Q3 - Exista momente cu duck curve?
+
+st.divider()
+
+st.header("Q3 - Efectul de duck curve")
+
+st.caption(
+    "Exista momente cu scadere a sarcinii reziduale la pranz, asociata productiei solare, "
+    "urmata de o crestere puternica spre seara?"
+)
+
+st.write(
+    "Analiza este realizata separat pentru fiecare anotimp, folosind profilurile medii "
+    "orare ale consumului, productiei solare si sarcinii reziduale."
+)
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Impartirea datelor pe anotimpuri
+
+df["Anotimp"] = df["Data"].dt.month.map({
+    12: "Iarna",
+    1: "Iarna",
+    2: "Iarna",
+    3: "Primavara",
+    4: "Primavara",
+    5: "Primavara",
+    6: "Vara",
+    7: "Vara",
+    8: "Vara",
+    9: "Toamna",
+    10: "Toamna",
+    11: "Toamna"
+})
+
+sezoane = [
+    "Iarna",
+    "Primavara",
+    "Vara",
+    "Toamna"
+]
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Profilul mediu pe ore pentru fiecare anotimp
+
+hourly_duck = df.groupby(
+    ["Anotimp", "Ora"]
+)[
+    [
+        "Consum[MW]",
+        "Foto[MW]",
+        "SarcinaReziduala[MW]"
+    ]
+].mean()
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Calcularea indicatorilor pentru fiecare anotimp
+
+duck_results = []
+
+for sezon in sezoane:
+
+    sezon_data = hourly_duck.loc[sezon]
+
+    morning_profile = sezon_data.loc[6:10]
+    midday_profile = sezon_data.loc[11:15]
+    evening_profile = sezon_data.loc[17:21]
+
+    # Peak solar
+    solar_peak_hour = sezon_data["Foto[MW]"].idxmax()
+    solar_peak_value = sezon_data["Foto[MW]"].max()
+
+    # Minim rezidual la pranz
+    midday_min_hour = (
+        midday_profile["SarcinaReziduala[MW]"].idxmin()
+    )
+
+    midday_min_value = (
+        midday_profile["SarcinaReziduala[MW]"].min()
+    )
+
+    # Nivel ridicat dimineata
+    morning_max_hour = (
+        morning_profile["SarcinaReziduala[MW]"].idxmax()
+    )
+
+    morning_max_value = (
+        morning_profile["SarcinaReziduala[MW]"].max()
+    )
+
+    midday_drop = (
+        morning_max_value
+        - midday_min_value
+    )
+
+    # Maxim rezidual seara
+    evening_max_hour = (
+        evening_profile["SarcinaReziduala[MW]"].idxmax()
+    )
+
+    evening_max_value = (
+        evening_profile["SarcinaReziduala[MW]"].max()
+    )
+
+    evening_rise = (
+        evening_max_value
+        - midday_min_value
+    )
+
+    # Cea mai mare crestere intre doua ore consecutive spre seara
+    evening_hourly_change = (
+        sezon_data.loc[16:21, "SarcinaReziduala[MW]"].diff()
+    )
+
+    max_evening_rise_hour = (
+        evening_hourly_change.idxmax()
+    )
+
+    max_evening_rise_value = (
+        evening_hourly_change.max()
+    )
+
+    duck_results.append({
+        "Anotimp": sezon,
+        "Ora peak solar": solar_peak_hour,
+        "Peak solar [MW]": solar_peak_value,
+        "Ora minim rezidual": midday_min_hour,
+        "Minim rezidual [MW]": midday_min_value,
+        "Scadere dimineata-pranz [MW]": midday_drop,
+        "Ora maxim seara": evening_max_hour,
+        "Maxim rezidual seara [MW]": evening_max_value,
+        "Crestere pranz-seara [MW]": evening_rise,
+        "Ora crestere maxima seara": max_evening_rise_hour,
+        "Crestere maxima orara [MW]": max_evening_rise_value
+    })
+
+
+duck_summary = pd.DataFrame(duck_results)
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Selectarea anotimpului
+
+sezon_selectat = st.selectbox(
+    "Selecteaza anotimpul:",
+    sezoane,
+    key="duck_season"
+)
+
+sezon_data = hourly_duck.loc[sezon_selectat]
+
+rezultat_sezon = duck_summary[
+    duck_summary["Anotimp"] == sezon_selectat
+].iloc[0]
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Indicatori principali
+
+col1, col2, col3, col4 = st.columns(4)
+
+col1.metric(
+    "Peak solar",
+    f"{rezultat_sezon['Peak solar [MW]']:.0f} MW",
+    help=f"In jurul orei {int(rezultat_sezon['Ora peak solar'])}:00"
+)
+
+col2.metric(
+    "Minim rezidual la pranz",
+    f"{rezultat_sezon['Minim rezidual [MW]']:.0f} MW",
+    help=f"In jurul orei {int(rezultat_sezon['Ora minim rezidual'])}:00"
+)
+
+col3.metric(
+    "Scadere dimineata - pranz",
+    f"{rezultat_sezon['Scadere dimineata-pranz [MW]']:.0f} MW"
+)
+
+col4.metric(
+    "Crestere pranz - seara",
+    f"+{rezultat_sezon['Crestere pranz-seara [MW]']:.0f} MW"
+)
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Grafic - profil sezonier
+
+st.subheader(f"Profil mediu zilnic - {sezon_selectat}")
+
+fig, ax = plt.subplots(figsize=(12, 6))
+
+ax.plot(
+    sezon_data.index,
+    sezon_data["Consum[MW]"],
+    marker="o",
+    label="Consum mediu"
+)
+
+ax.plot(
+    sezon_data.index,
+    sezon_data["SarcinaReziduala[MW]"],
+    marker="o",
+    label="Sarcina reziduala"
+)
+
+ax.plot(
+    sezon_data.index,
+    sezon_data["Foto[MW]"],
+    marker="o",
+    label="Productie solara medie"
+)
+
+ax.set_xlabel("Ora")
+ax.set_ylabel("MW")
+
+ax.set_title(
+    f"Consum, productie solara si sarcina reziduala - {sezon_selectat}"
+)
+
+ax.set_xticks(range(24))
+ax.legend()
+ax.grid(alpha=0.3)
+
+st.pyplot(
+    fig,
+    use_container_width=True
+)
+
+plt.close(fig)
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Detalii despre profilul selectat
+
+st.subheader("Momente relevante")
+
+col1, col2 = st.columns(2)
+
+col1.metric(
+    "Maxim rezidual seara",
+    f"{rezultat_sezon['Maxim rezidual seara [MW]']:.0f} MW",
+    help=f"In jurul orei {int(rezultat_sezon['Ora maxim seara'])}:00"
+)
+
+col2.metric(
+    "Cea mai mare crestere orara spre seara",
+    f"+{rezultat_sezon['Crestere maxima orara [MW]']:.0f} MW",
+    help=(
+        f"Cresterea este observata la trecerea spre ora "
+        f"{int(rezultat_sezon['Ora crestere maxima seara'])}:00"
+    )
+)
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Comparatie intre anotimpuri
+
+with st.expander("Vezi comparatia intre anotimpuri"):
+
+    st.dataframe(
+        duck_summary[
+            [
+                "Anotimp",
+                "Ora peak solar",
+                "Peak solar [MW]",
+                "Ora minim rezidual",
+                "Minim rezidual [MW]",
+                "Scadere dimineata-pranz [MW]",
+                "Crestere pranz-seara [MW]",
+                "Crestere maxima orara [MW]"
+            ]
+        ].round(0),
+        hide_index=True,
+        use_container_width=True
+    )
+
+
+# --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Concluzie Q3
+
+st.subheader("Concluzie Q3")
+
+st.markdown(
+    f"""
+In **{sezon_selectat.lower()}**, productia solara atinge valoarea maxima de aproximativ
+**{rezultat_sezon['Peak solar [MW]']:.0f} MW** in jurul orei
+**{int(rezultat_sezon['Ora peak solar'])}:00**.
+
+In intervalul de pranz, sarcina reziduala ajunge la un minim de aproximativ
+**{rezultat_sezon['Minim rezidual [MW]']:.0f} MW**, in jurul orei
+**{int(rezultat_sezon['Ora minim rezidual'])}:00**. Fata de nivelul ridicat din
+intervalul de dimineata, aceasta reprezinta o scadere de aproximativ
+**{rezultat_sezon['Scadere dimineata-pranz [MW]']:.0f} MW**.
+
+Spre seara, pe masura ce productia solara se reduce, sarcina reziduala creste pana la
+aproximativ **{rezultat_sezon['Maxim rezidual seara [MW]']:.0f} MW**, ceea ce
+reprezinta o crestere de aproximativ
+**{rezultat_sezon['Crestere pranz-seara [MW]']:.0f} MW** fata de minimul de la pranz.
+
+Acest profil este **compatibil cu fenomenul de duck curve**: cresterea productiei
+solare coincide cu reducerea sarcinii reziduale in jurul pranzului, iar reducerea
+productiei solare spre seara este insotita de o crestere puternica a sarcinii
+reziduale. Analiza rampelor din Q2 completeaza aceasta observatie prin evidentierea
+vitezei cu care sarcina reziduala se poate modifica in intervalele scurte de timp.
 """
 )
